@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GitHub Board</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --surface3: #2a2f48;
+      --border: #2e3250;
+      --accent: #6c63ff;
+      --accent2: #00d2ff;
+      --text: #e2e8f0;
+      --muted: #7a839e;
+      --success: #22d3a0;
+      --warn: #f59e0b;
+      --danger: #f43f5e;
+      --issue: #2dd4bf;
+      --pr: #a78bfa;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ------------------------------- header ------------------------------ */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    header h1 {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: .3px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      margin-right: 6px;
+      white-space: nowrap;
+    }
+    .spacer { flex: 1; }
+
+    input[type="text"], input[type="password"], input[type="number"],
+    textarea, select {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 9px;
+      font: inherit;
+      outline: none;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+    textarea { resize: vertical; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; }
+
+    .token-wrap { display: flex; align-items: center; gap: 6px; }
+    #token { width: 210px; font-size: 12.5px; }
+
+    button {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font: inherit;
+      transition: background .12s, border-color .12s;
+    }
+    button:hover { background: var(--surface3); border-color: var(--accent); }
+    button:disabled { opacity: .5; cursor: default; }
+    button.primary { background: linear-gradient(90deg, var(--accent), #5a52d6); border-color: transparent; color: #fff; font-weight: 600; }
+    button.primary:hover { filter: brightness(1.1); }
+
+    #rate { font-size: 12px; color: var(--muted); padding: 4px 8px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border); }
+    #rate.low { color: var(--warn); border-color: var(--warn); }
+
+    #status { font-size: 12.5px; padding: 4px 10px; border-radius: 6px; }
+    .status.info { color: var(--muted); }
+    .status.ok { color: var(--success); }
+    .status.warn { color: var(--warn); }
+    .status.error { color: var(--danger); }
+
+    .icon-btn { padding: 6px 10px; }
+
+    /* ------------------------------- config ------------------------------ */
+    #config {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height .25s ease;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    #config.open { max-height: 4200px; overflow: auto; }
+    .config-inner { padding: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px 28px; }
+    .cfg-section { display: flex; flex-direction: column; gap: 8px; }
+    .cfg-section h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 2px; }
+    .cfg-section label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+    .row-inline { display: flex; align-items: center; gap: 8px; }
+    .row-inline input[type="number"] { width: 90px; }
+    .row-inline select { width: auto; }
+    .help-link { color: var(--accent2); cursor: pointer; font-size: 12px; text-decoration: underline; background: none; border: none; padding: 0; }
+    .help-link:hover { color: var(--accent); }
+
+    .expr-field { position: relative; }
+    .expr-field .dot, .r-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
+    .dot.ok, .r-dot.ok { background: var(--success); }
+    .dot.bad, .r-dot.bad { background: var(--danger); }
+    .dot.blank, .r-dot.blank { background: var(--muted); opacity: .5; }
+    #filterDot { position: absolute; right: 8px; top: 8px; }
+    #filterErr { color: var(--danger); font-size: 11.5px; font-family: ui-monospace, monospace; min-height: 14px; }
+
+    .rule-list { display: flex; flex-direction: column; gap: 6px; }
+    .rule-row { display: flex; align-items: center; gap: 6px; }
+    .rule-row .r-name { width: 150px; flex: 0 0 auto; }
+    .rule-row .r-expr { flex: 1; font-family: ui-monospace, monospace; font-size: 12px; }
+    .rule-row button { padding: 4px 7px; font-size: 12px; line-height: 1; }
+    .rule-row .r-split { color: var(--accent2); font-size: 13px; cursor: help; }
+    .rule-row.is-split .r-name { border-color: var(--accent2); box-shadow: 0 0 0 1px var(--accent2); }
+    .empty-hint { color: var(--muted); font-size: 12px; font-style: italic; }
+
+    .check-row { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+    .check-row input { width: auto; }
+
+    /* -------------------------------- help ------------------------------- */
+    #help { max-height: 0; overflow: hidden; transition: max-height .25s ease; background: var(--bg); border-bottom: 1px solid var(--border); }
+    #help.open { max-height: 800px; overflow: auto; }
+    .help-inner { padding: 14px 18px; }
+    .help-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .help-inner h4 { font-size: 12px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+    .help-inner table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .help-inner td { padding: 3px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .help-inner td:first-child { width: 45%; }
+    .help-inner code { font-family: ui-monospace, monospace; color: var(--accent2); font-size: 12px; }
+    .help-inner ul.ex { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+    .help-inner ul.split-ex code + code { margin-left: 4px; }
+    .help-inner .muted { color: var(--muted); font-size: 11.5px; }
+    .help-note { color: var(--muted); font-size: 12px; margin-top: 10px; line-height: 1.5; }
+    .help-note code { color: var(--accent2); }
+
+    /* -------------------------------- board ------------------------------ */
+    #board { flex: 1; overflow: auto; padding: 0; }
+    .empty { color: var(--muted); padding: 40px; text-align: center; line-height: 1.7; }
+    .warn-text { color: var(--warn); }
+
+    .board-inner { display: inline-flex; flex-direction: column; min-width: 100%; }
+    .board-head, .lane-row { display: flex; align-items: stretch; }
+    .lane-corner, .lane-label {
+      width: 150px; flex: 0 0 150px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .board-head { position: sticky; top: 0; z-index: 20; }
+    .lane-corner {
+      position: sticky; left: 0; z-index: 30;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; color: var(--muted); font-weight: 600;
+    }
+    .lane-cells { display: flex; }
+    .col-head {
+      width: 300px; flex: 0 0 300px;
+      padding: 9px 12px;
+      background: var(--surface2);
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      font-weight: 600; font-size: 13px;
+      position: sticky; top: 0; z-index: 21;
+    }
+    .col-head.unmatched, .lane-label.unmatched, .cell.unmatched { opacity: .7; }
+    .col-count { font-size: 11.5px; color: var(--muted); background: var(--bg); border-radius: 10px; padding: 1px 8px; }
+
+    .lane-row { border-bottom: 1px solid var(--border); }
+    .lane-label {
+      position: sticky; left: 0; z-index: 10;
+      display: flex; flex-direction: column; justify-content: center; gap: 2px;
+      padding: 10px 12px;
+      font-weight: 600; font-size: 12.5px;
+    }
+    .lane-label.empty-lane { background: transparent; border-right-color: transparent; }
+    .lane-count { font-size: 11px; color: var(--muted); font-weight: 500; }
+
+    .cell {
+      width: 300px; flex: 0 0 300px;
+      padding: 8px;
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 8px;
+      background: var(--bg);
+    }
+    .cell-empty { min-height: 30px; }
+
+    .card {
+      display: block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--muted);
+      border-radius: 8px;
+      padding: 9px 10px;
+      text-decoration: none;
+      color: var(--text);
+      transition: border-color .12s, transform .05s;
+    }
+    .card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .card.issue { border-left-color: var(--issue); }
+    .card.pr { border-left-color: var(--pr); }
+    .card.closed { opacity: .82; }
+
+    .card-top { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+    .card-top .kind { font-weight: 700; color: var(--text); background: var(--surface3); border-radius: 4px; padding: 1px 5px; font-size: 10px; }
+    .card-top .num { font-family: ui-monospace, monospace; }
+    .badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; text-transform: lowercase; margin-left: auto; }
+    .badge.draft { background: var(--warn); color: #1a1d27; }
+    .badge.merged { background: #8b5cf6; color: #fff; }
+    .badge.closed { background: var(--danger); color: #fff; }
+    .card-title { font-size: 13px; line-height: 1.35; margin-bottom: 6px; }
+    .card-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+    .chip { font-size: 10.5px; padding: 1px 7px; border-radius: 10px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .repo { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .people { display: flex; flex-shrink: 0; }
+    .people .avatar + .avatar { margin-left: -6px; border: 1.5px solid var(--surface); }
+    .avatar { width: 20px; height: 20px; border-radius: 50%; vertical-align: middle; }
+
+    @media (max-width: 720px) {
+      .config-inner { grid-template-columns: 1fr; }
+      .help-grid { grid-template-columns: 1fr; }
+      #token { width: 130px; }
+      header { gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>GitHub Board</h1>
+    <div class="token-wrap">
+      <input id="token" type="password" placeholder="GitHub PAT (github_pat_…)" autocomplete="off" />
+      <button id="tokenSave" class="icon-btn" title="Save token to this browser">Save</button>
+    </div>
+    <span id="rate" title="Rate limit"></span>
+    <span id="status" class="status info">Add a token to begin.</span>
+    <div class="spacer"></div>
+    <button id="configToggle" class="icon-btn" title="Toggle settings">&#9881; Settings</button>
+    <button id="helpToggle" class="icon-btn" title="Toggle expression help">? Help</button>
+    <button id="refresh" class="primary">Refresh</button>
+  </header>
+
+  <section id="help">
+    <div class="help-inner">
+      <h3 style="font-size:12px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Expression reference (used in filter, columns, swimlanes)</h3>
+      <div id="helpBody"></div>
+    </div>
+  </section>
+
+  <section id="config">
+    <div class="config-inner">
+      <div class="cfg-section">
+        <h3>Source</h3>
+        <label>GitHub search query
+          <textarea id="query" rows="2" placeholder="repo:owner/name&#10;org:yourorg is:open&#10;user:me involves:me archived:false"></textarea>
+        </label>
+        <div class="row-inline">
+          <label style="flex-direction:row;align-items:center;gap:4px;">State
+            <select id="states">
+              <option value="all">all</option>
+              <option value="open">open</option>
+              <option value="closed">closed</option>
+            </select>
+          </label>
+          <label style="flex-direction:row;align-items:center;gap:4px;">Max items
+            <input id="maxItems" type="number" min="1" max="2000" step="50" />
+          </label>
+        </div>
+        <p style="font-size:11.5px;color:var(--muted);line-height:1.5;">
+          The query uses GitHub's search syntax (fetches issues + PRs via GraphQL). The filter below then narrows and organizes client-side.
+        </p>
+      </div>
+
+      <div class="cfg-section">
+        <h3>Filter &amp; sort</h3>
+        <label>Filter expression <span style="color:var(--muted)">(only matching items appear)</span>
+          <div class="expr-field">
+            <textarea id="filter" rows="2" placeholder='e.g. labels =~ /^area:/i and not assignees empty' spellcheck="false"></textarea>
+            <span id="filterDot" class="dot blank"></span>
+          </div>
+          <span id="filterErr"></span>
+        </label>
+        <div class="row-inline">
+          <label style="flex-direction:row;align-items:center;gap:4px;">Sort within cell
+            <select id="sort">
+              <option value="updated">Updated (newest)</option>
+              <option value="created">Created (newest)</option>
+              <option value="number-desc">Number (high&rarr;low)</option>
+              <option value="number-asc">Number (low&rarr;high)</option>
+              <option value="title">Title (A&rarr;Z)</option>
+              <option value="age">Age (oldest first)</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="cfg-section">
+        <h3>Columns <button id="addColumn" style="padding:3px 8px;font-size:11px;">+ Add</button></h3>
+        <div id="columns" class="rule-list"></div>
+        <div id="columnsEmpty" class="empty-hint">No columns. Add one, or leave empty to show all items in a single column.</div>
+        <label class="check-row"><input id="hideUnmatchedCol" type="checkbox" /> Hide "Unmatched" column</label>
+      </div>
+
+      <div class="cfg-section">
+        <h3>Swimlanes (rows) <button id="addSwimlane" style="padding:3px 8px;font-size:11px;">+ Add</button></h3>
+        <div id="swimlanes" class="rule-list"></div>
+        <div id="swimlanesEmpty" class="empty-hint">No swimlanes. Add one to split rows into horizontal groups.</div>
+        <label class="check-row"><input id="hideUnmatchedLane" type="checkbox" /> Hide "Unmatched" swimlane</label>
+      </div>
+
+      <div class="cfg-section" style="grid-column:1 / -1;">
+        <h3>Presets</h3>
+        <div class="row-inline" style="flex-wrap:wrap;">
+          <select id="presetSelect" style="min-width:200px;"><option value="">(select preset…)</option></select>
+          <input id="presetName" type="text" placeholder="preset name" style="width:180px;" />
+          <button id="presetSave">Save current</button>
+          <button id="presetDelete">Delete</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <main id="board">
+    <div class="empty">Loading…</div>
+  </main>
+
+  <script src="github-board.engine.js"></script>
+  <script src="github-board.app.js"></script>
+</body>
+</html>
