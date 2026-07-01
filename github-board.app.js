@@ -221,16 +221,16 @@
       return { r, splitter, pred: safeCompile(r.expr), extract: splitter ? GB.tryExtract(r.expr) : null };
     });
 
-    const raw = [];            // { name, unmatched, single, order, seq }
+    const raw = [];            // { name, unmatched, single, order, sortKey, seq }
     const idToIdx = new Map(); // bucket id -> raw index
     let seq = 0;
-    function add(name, id, order, unmatched, single) {
-      if (!idToIdx.has(id)) { idToIdx.set(id, raw.length); raw.push({ name, id, unmatched: !!unmatched, single: !!single, order, seq: seq++ }); }
+    function add(name, id, order, sortKey, unmatched, single) {
+      if (!idToIdx.has(id)) { idToIdx.set(id, raw.length); raw.push({ name, id, unmatched: !!unmatched, single: !!single, order, sortKey, seq: seq++ }); }
       return idToIdx.get(id);
     }
 
     // Pre-create fixed (non-splitter) buckets so empty columns/lanes still show.
-    compiled.forEach((c, ri) => { if (!c.splitter && c.pred) add(c.r.name, "f" + ri, ri, false, false); });
+    compiled.forEach((c, ri) => { if (!c.splitter && c.pred) add(c.r.name, "f" + ri, ri, "", false, false); });
 
     const itemIdx = new Map();
     items.forEach((it) => {
@@ -241,19 +241,22 @@
         if (c.splitter) {
           const ex = c.extract ? c.extract(it) : null;
           if (!ex) continue; // matched but no capture -> fall through to next rule / unmatched
-          idx = add(templName(c.r.name, ex), "d" + ri + "|" + ex.key, ri, false, false);
+          idx = add(templName(c.r.name, ex), "d" + ri + "|" + ex.key, ri, String(ex.key), false, false);
         } else {
-          idx = add(c.r.name, "f" + ri, ri, false, false);
+          idx = add(c.r.name, "f" + ri, ri, "", false, false);
         }
         break;
       }
-      if (idx == null && !hideUnmatched) idx = add("Unmatched", "u", 1e9, true, false);
+      if (idx == null && !hideUnmatched) idx = add("Unmatched", "u", 1e9, "", true, false);
       if (idx != null) itemIdx.set(it, idx);
     });
 
-    // Order buckets by rule position, then first-seen; Unmatched always last.
-    const order = raw.map((_, i) => i).sort((a, b) => raw[a].order - raw[b].order || raw[a].seq - raw[b].seq);
-    const buckets = order.map((i) => { const b = raw[i]; delete b.id; delete b.order; delete b.seq; return b; });
+    // Order buckets by rule position; within a splitter rule, alphabetically by
+    // captured key (case-insensitive); Unmatched always last.
+    const alpha = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+    const order = raw.map((_, i) => i).sort((a, b) =>
+      raw[a].order - raw[b].order || alpha(raw[a].sortKey, raw[b].sortKey) || raw[a].seq - raw[b].seq);
+    const buckets = order.map((i) => { const b = raw[i]; delete b.id; delete b.order; delete b.sortKey; delete b.seq; return b; });
     const remap = new Map(); order.forEach((oldIdx, newIdx) => remap.set(oldIdx, newIdx));
     const index = new Map(); itemIdx.forEach((v, k) => index.set(k, remap.get(v)));
 
