@@ -1,0 +1,12 @@
+{
+  "name": "github-board-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tests for github-board (vanilla JS app). Engine tests need no deps; e2e tests need jsdom.",
+  "scripts": {
+    "test": "node test/github-board-engine.test.js && node test/github-board-extract.test.js && node test/github-board-e2e-board.test.js && node test/github-board-e2e-splitter.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "24"
+  }
+}
