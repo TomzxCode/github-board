@@ -36,8 +36,8 @@ store["gb:config:v1"] = JSON.stringify({
 });
 
 let fetchCalls = 0;
-const dom = new JSDOM(fs.readFileSync(ROOT + "/github-board.html", "utf8"), {
-  url: "file://" + path.join(ROOT, "github-board.html"),
+const dom = new JSDOM(fs.readFileSync(ROOT + "/index.html", "utf8"), {
+  url: "file://" + path.join(ROOT, "index.html"),
   runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
   beforeParse(window) {
     Object.defineProperty(window, "localStorage", { value: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } }, configurable: true });

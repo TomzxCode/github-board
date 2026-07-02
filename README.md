@@ -29,6 +29,7 @@ GitHub's issue and PR lists are flat and hard to organize across many items or m
 - Card sorting within each cell by updated, created, number, title, or age
 - GitHub GraphQL fetching with pagination (up to 2000 items) and a live rate-limit indicator
 - Named presets that save the full configuration (query, filter, columns, swimlanes)
+- Shareable links: the full view (query, filter, columns, swimlanes, sort) is encoded in the URL hash so you can send it to a teammate, who sees the same board using their own token (the token is never included in the link)
 - Dark, responsive UI that works on mobile and desktop
 - All config and the token persist in the browser's `localStorage`; requests go directly from your browser to GitHub
 
@@ -75,6 +76,7 @@ npm test
 5. The default board ships with Draft PRs, Open PRs, Open Issues, and Closed columns. Edit, add, remove, or reorder columns and swimlanes in Settings to match your workflow; the board re-renders live as you type.
 6. Use **? Help** for the full expression reference, including how to auto-split a column with a `$1` capture group.
 7. Save your layout as a preset with **Save current** to reuse it later.
+8. Use **Share** to copy a link to the current view. Opening it loads the same query, filter, columns, and swimlanes; only your token is left out, so the recipient pastes their own and hits **Refresh**.
 
 ## License
 

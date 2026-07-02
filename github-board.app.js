@@ -529,6 +529,78 @@
     setStatus(state.token ? "Token saved locally (never sent anywhere but GitHub)." : "Token cleared.", "ok");
   }
 
+  /* ------------------------- shareable url --------------------------- */
+  // The full config (minus the token, which never lives in state.config) is
+  // serialized to URL-safe base64 JSON and carried in the hash so the link
+  // works from any static host or file:// without a backend. The token is
+  // deliberately excluded; recipients use their own.
+  const SHARE_KEY = "c";
+
+  function b64UrlEncodeUtf8(str) {
+    const b64 = btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p) => String.fromCharCode(parseInt(p, 16))));
+    return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function b64UrlDecodeUtf8(b64url) {
+    let b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    const bin = atob(b64);
+    const pct = Array.from(bin, (c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("");
+    return decodeURIComponent(pct);
+  }
+
+  function buildShareUrl() {
+    const code = b64UrlEncodeUtf8(JSON.stringify(state.config));
+    return location.origin + location.pathname + location.search + "#" + SHARE_KEY + "=" + code;
+  }
+
+  async function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    if (!ok) throw new Error("clipboard write failed");
+  }
+
+  function shareView() {
+    formToConfig();
+    saveConfig();
+    let url;
+    try { url = buildShareUrl(); }
+    catch (e) { setStatus("Could not build share link: " + e.message, "error"); return; }
+    history.replaceState(null, "", url);
+    copyToClipboard(url).then(
+      () => setStatus("Shareable link copied to clipboard (token excluded).", "ok"),
+      () => setStatus("Shareable link is in the address bar (token excluded). Copy it manually.", "ok")
+    );
+  }
+
+  // Returns true if a shared config was found in the URL and applied.
+  function loadSharedConfigFromUrl() {
+    const m = (location.hash || "").match(new RegExp("[#&]" + SHARE_KEY + "=([^&]+)"));
+    if (!m) return false;
+    try {
+      const parsed = JSON.parse(b64UrlDecodeUtf8(m[1]));
+      state.config = mergeConfig(parsed);
+      saveConfig();
+      configToForm();
+      return true;
+    } catch (e) {
+      setStatus("Could not load shared view from URL: " + e.message, "error");
+      return false;
+    }
+  }
+
   /* ------------------------------ help ------------------------------- */
   function renderHelp() {
     const fields = GB.FIELDS.map(([f, d]) => `<tr><td><code>${esc(f)}</code></td><td>${esc(d)}</td></tr>`).join("");
@@ -551,6 +623,7 @@
   /* ------------------------------ wiring ----------------------------- */
   function init() {
     configToForm();
+    const loadedShared = loadSharedConfigFromUrl();
     renderRate();
     renderHelp();
     renderBoard();
@@ -560,6 +633,7 @@
     $("#refresh").addEventListener("click", fetchBoard);
     $("#configToggle").addEventListener("click", () => $("#config").classList.toggle("open"));
     $("#helpToggle").addEventListener("click", () => $("#help").classList.toggle("open"));
+    $("#share").addEventListener("click", shareView);
     $("#addColumn").addEventListener("click", () => addRule("columns"));
     $("#addSwimlane").addEventListener("click", () => addRule("swimlanes"));
 
@@ -573,6 +647,9 @@
     $("#presetSave").addEventListener("click", savePreset);
     $("#presetDelete").addEventListener("click", deletePreset);
 
+    if (loadedShared) {
+      setStatus("Loaded a shared view from the link. Add your token if prompted, then Refresh.", "info");
+    }
     if (state.token && state.config.query) fetchBoard();
   }
 
