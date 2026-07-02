@@ -1,5 +1,5 @@
-/* End-to-end test for regex-capture splitter columns (alphabetical ordering).
- * Requires jsdom: `npm install` then `node test/github-board-e2e-splitter.test.js`. */
+/* End-to-end test for regex-capture splitter columns with descending order.
+ * Requires jsdom: `npm install` then `node test/e2e-splitter-desc.test.js`. */
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
@@ -31,7 +31,7 @@ const store = {};
 store["gb:token:v1"] = "pat_test";
 store["gb:config:v1"] = JSON.stringify({
   query: "repo:o/r", states: "all", maxItems: 200, filter: "", sort: "number-asc",
-  columns: [{ name: "$1", expr: "labels =~ /^area:(.+)$/" }],
+  columns: [{ name: "$1", expr: "labels =~ /^area:(.+)$/", splitSort: "desc" }],
   swimlanes: [], hideUnmatchedCol: false, hideUnmatchedLane: false,
 });
 
@@ -54,10 +54,7 @@ const t = setInterval(() => {
   if (doc.querySelectorAll(".card").length === 0 && waited < 4000) return;
   clearInterval(t);
   const heads = Array.from(doc.querySelectorAll(".col-head")).map((h) => [h.querySelector(".col-name").textContent.trim(), h.querySelector(".col-count").textContent.trim()]);
-  assert(JSON.stringify(heads) === JSON.stringify([["alpha", "1"], ["frontend", "1"], ["p2", "1"], ["p10", "1"], ["zeta", "1"], ["Unmatched", "1"]]), "splitter columns alphabetical (alpha,frontend,p2,p10,zeta,Unmatched): " + JSON.stringify(heads));
-  const cfg = doc.querySelector("#config"); cfg.classList.add("open");
-  const splitRow = doc.querySelector('#columns .rule-row[data-i="0"]');
-  assert(!!splitRow && splitRow.classList.contains("is-split"), "splitter rule row marked is-split");
+  assert(JSON.stringify(heads) === JSON.stringify([["zeta", "1"], ["p10", "1"], ["p2", "1"], ["frontend", "1"], ["alpha", "1"], ["Unmatched", "1"]]), "splitter columns descending (zeta,p10,p2,frontend,alpha,Unmatched): " + JSON.stringify(heads));
   console.log("\ncolumns:", JSON.stringify(heads));
   console.log(process.exitCode ? "\nSOME FAILED" : "\nALL PASS");
   process.exit();

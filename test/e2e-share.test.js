@@ -3,7 +3,7 @@
  *   load and applied to the form + localStorage (token never required).
  * - Encode direction: clicking Share rebuilds a #c= link from state.config
  *   (history.replaceState is stubbed so we can capture the generated URL).
- * Requires jsdom: `npm install` then `node test/github-board-e2e-share.test.js`. */
+ * Requires jsdom: `npm install` then `node test/e2e-share.test.js`. */
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");

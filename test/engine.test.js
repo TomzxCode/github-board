@@ -1,5 +1,5 @@
-/* Predicate/boolean tests for github-board.engine.js (no dependencies). */
-const E = require("../github-board.engine.js");
+/* Predicate/boolean tests for engine.js (no dependencies). */
+const E = require("../engine.js");
 const now = Date.now();
 const day = 864e5;
 const age = (d) => Math.round((now - d) / day);

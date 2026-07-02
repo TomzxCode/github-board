@@ -1,7 +1,7 @@
 /*
- * github-board.app.js
+ * app.js
  * Front-end logic: GitHub GraphQL fetch + config UI + board rendering.
- * Depends on github-board.engine.js (window.GBEngine), loaded beforehand.
+ * Depends on engine.js (window.GBEngine), loaded beforehand.
  */
 (function () {
   "use strict";
@@ -47,6 +47,7 @@
   }
   function saveConfig() { localStorage.setItem(LS_CONFIG, JSON.stringify(state.config)); }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function dedupe(arr) { return Array.from(new Set(arr)); }
   function mergeConfig(c) {
     const out = clone(DEFAULT_CONFIG);
     Object.assign(out, c);
@@ -213,12 +214,14 @@
   }
 
   // Builds an ordered list of buckets for one dimension (columns or swimlanes).
-  // Returns { buckets: [{name, unmatched, single}], index: Map(item -> bucketIdx) }.
+  // Returns { buckets: [{name, unmatched, single}], index: Map(item -> [bucketIdx, ...]) }.
+  // An item may land in several buckets: it matches every rule it satisfies, and
+  // within a splitter it gets one bucket per distinct captured value.
   function buildDimension(rules, items, hideUnmatched, isLane) {
     if (!rules || !rules.length) rules = [{ name: isLane ? "" : "Items", expr: "" }];
     const compiled = rules.map((r) => {
       const splitter = isSplitter(r);
-      return { r, splitter, pred: safeCompile(r.expr), extract: splitter ? GB.tryExtract(r.expr) : null };
+      return { r, splitter, pred: safeCompile(r.expr), extract: splitter ? GB.tryExtractAll(r.expr) : null, dir: r.splitSort === "desc" ? -1 : 1 };
     });
 
     const raw = [];            // { name, unmatched, single, order, sortKey, seq }
@@ -234,31 +237,33 @@
 
     const itemIdx = new Map();
     items.forEach((it) => {
-      let idx = null;
+      const idxs = [];
       for (let ri = 0; ri < compiled.length; ri++) {
         const c = compiled[ri];
         if (!c.pred || !c.pred(it)) continue;
         if (c.splitter) {
-          const ex = c.extract ? c.extract(it) : null;
-          if (!ex) continue; // matched but no capture -> fall through to next rule / unmatched
-          idx = add(templName(c.r.name, ex), "d" + ri + "|" + ex.key, ri, String(ex.key), false, false);
+          const exs = c.extract ? c.extract(it) : [];
+          for (const ex of exs) idxs.push(add(templName(c.r.name, ex), "d" + ri + "|" + ex.key, ri, String(ex.key), false, false));
         } else {
-          idx = add(c.r.name, "f" + ri, ri, "", false, false);
+          idxs.push(add(c.r.name, "f" + ri, ri, "", false, false));
         }
-        break;
       }
-      if (idx == null && !hideUnmatched) idx = add("Unmatched", "u", 1e9, "", true, false);
-      if (idx != null) itemIdx.set(it, idx);
+      if (idxs.length === 0 && !hideUnmatched) idxs.push(add("Unmatched", "u", 1e9, "", true, false));
+      if (idxs.length) itemIdx.set(it, dedupe(idxs));
     });
 
     // Order buckets by rule position; within a splitter rule, alphabetically by
-    // captured key (case-insensitive); Unmatched always last.
+    // captured key (case-insensitive) in that rule's chosen direction; Unmatched always last.
     const alpha = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
-    const order = raw.map((_, i) => i).sort((a, b) =>
-      raw[a].order - raw[b].order || alpha(raw[a].sortKey, raw[b].sortKey) || raw[a].seq - raw[b].seq);
+    const dirOf = (ri) => (ri >= 0 && ri < compiled.length) ? compiled[ri].dir : 1;
+    const order = raw.map((_, i) => i).sort((a, b) => {
+      if (raw[a].order !== raw[b].order) return raw[a].order - raw[b].order;
+      return dirOf(raw[a].order) * alpha(raw[a].sortKey, raw[b].sortKey) || raw[a].seq - raw[b].seq;
+    });
     const buckets = order.map((i) => { const b = raw[i]; delete b.id; delete b.order; delete b.sortKey; delete b.seq; return b; });
     const remap = new Map(); order.forEach((oldIdx, newIdx) => remap.set(oldIdx, newIdx));
-    const index = new Map(); itemIdx.forEach((v, k) => index.set(k, remap.get(v)));
+    const index = new Map();
+    itemIdx.forEach((arr, k) => index.set(k, dedupe(arr.map((i) => remap.get(i)))));
 
     if (buckets.length === 0) buckets.push({ name: isLane ? "" : "Items", unmatched: false, single: !!isLane });
     return { buckets, index };
@@ -275,17 +280,15 @@
     const cols = colModel.buckets;
     const lanes = laneModel.buckets;
     const grid = lanes.map(() => cols.map(() => []));
-    const colTotals = cols.map(() => 0);
     items.forEach((it) => {
-      const ci = colModel.index.get(it);
-      const li = laneModel.index.get(it);
-      if (ci == null || li == null) return;
-      grid[li][ci].push(it);
-      colTotals[ci]++;
+      const cis = colModel.index.get(it) || [];
+      const lis = laneModel.index.get(it) || [];
+      for (const li of lis) for (const ci of cis) grid[li][ci].push(it);
     });
     for (let li = 0; li < lanes.length; li++)
       for (let ci = 0; ci < cols.length; ci++)
         grid[li][ci] = sortItems(grid[li][ci] || [], cfg.sort);
+    const colTotals = cols.map((_, ci) => { let s = 0; for (let li = 0; li < lanes.length; li++) s += grid[li][ci].length; return s; });
 
     return { cols, lanes, grid, colTotals, total: items.length };
   }
@@ -412,6 +415,10 @@
         <input class="r-name" value="${esc(r.name)}" placeholder="Name (use $1 to split)" spellcheck="false">
         <input class="r-expr" value="${esc(r.expr)}" placeholder='e.g. labels =~ /^area:(.+)$/' spellcheck="false">
         <span class="r-split" title="Splitter: one bucket per captured $1 value">\u29C9</span>
+        <select class="r-split-sort" title="Sort this splitter's buckets">
+          <option value="asc">A\u2192Z</option>
+          <option value="desc">Z\u2192A</option>
+        </select>
         <span class="r-dot" title=""></span>
         <button class="r-up" title="Move up">\u2191</button>
         <button class="r-down" title="Move down">\u2193</button>
@@ -420,7 +427,11 @@
     }).join("");
     $$(".rule-row", container).forEach((row) => {
       bindRow(row);
-      row.querySelector(".r-split").style.visibility = isSplitter(state.config[which][+row.dataset.i]) ? "visible" : "hidden";
+      const split = isSplitter(state.config[which][+row.dataset.i]);
+      row.querySelector(".r-split").style.visibility = split ? "visible" : "hidden";
+      const sortSel = row.querySelector(".r-split-sort");
+      sortSel.value = state.config[which][+row.dataset.i].splitSort === "desc" ? "desc" : "asc";
+      sortSel.style.visibility = split ? "visible" : "hidden";
     });
     $$(".r-expr", container).forEach(updateExprDot);
     if (hint && hint.list === which) {
@@ -459,9 +470,12 @@
       const split = isSplitter(state.config[which][i]);
       row.classList.toggle("is-split", split);
       $(".r-split", row).style.visibility = split ? "visible" : "hidden";
+      $(".r-split-sort", row).style.visibility = split ? "visible" : "hidden";
       schedulePreview();
     });
     exprI.addEventListener("input", () => { state.config[which][i].expr = exprI.value; updateExprDot(exprI); schedulePreview(); });
+    const sortSel = $(".r-split-sort", row);
+    sortSel.addEventListener("change", () => { state.config[which][i].splitSort = sortSel.value; saveConfig(); renderBoard(); });
     $(".r-up", row).addEventListener("click", () => move(which, i, -1));
     $(".r-down", row).addEventListener("click", () => move(which, i, 1));
     $(".r-del", row).addEventListener("click", () => { state.config[which].splice(i, 1); state.focusHint = null; renderRuleList(which); saveConfig(); renderBoard(); });
@@ -578,7 +592,7 @@
     let url;
     try { url = buildShareUrl(); }
     catch (e) { setStatus("Could not build share link: " + e.message, "error"); return; }
-    history.replaceState(null, "", url);
+    try { history.replaceState(null, "", url); } catch (e) { /* address bar may be immutable in some sandboxes; clipboard is enough */ }
     copyToClipboard(url).then(
       () => setStatus("Shareable link copied to clipboard (token excluded).", "ok"),
       () => setStatus("Shareable link is in the address bar (token excluded). Copy it manually.", "ok")
@@ -615,7 +629,7 @@
              <h4>Filter examples</h4><ul class="ex">${ex}</ul></div>
       </div>
       <h4>Auto-splitting columns / swimlanes</h4>
-      <p class="help-note">If a column or swimlane <strong>name</strong> contains <code>$1</code>, the rule's regex capture expands into one bucket per distinct captured value. Put the part you want as the bucket name in a capture group, then reference it with <code>$1</code> (or <code>$2</code>, <code>$0</code> for the whole match). Examples (name \u2192 expression):</p>
+      <p class="help-note">If a column or swimlane <strong>name</strong> contains <code>$1</code>, the rule's regex capture expands into one bucket per distinct captured value. Put the part you want as the bucket name in a capture group, then reference it with <code>$1</code> (or <code>$2</code>, <code>$0</code> for the whole match). An item is placed in <em>every</em> bucket it matches: it can satisfy several rules at once, and within a splitter it gets one bucket per matching value (e.g. multiple <code>area:*</code> labels). Examples (name \u2192 expression):</p>
       <ul class="ex split-ex">${sp}</ul>
       <p class="help-note">Relative dates: <code>"7d"</code> <code>"2w"</code> <code>"3m"</code> <code>"1y"</code> (ago), <code>"now"</code>, or <code>"YYYY-MM-DD"</code>. Strings are compared case-insensitively. Arrays (labels, assignees) match if <em>any</em> element matches.</p>`;
   }

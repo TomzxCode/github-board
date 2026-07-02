@@ -1,5 +1,5 @@
-/* Capture-group extraction tests for github-board.engine.js (no dependencies). */
-const E = require("../github-board.engine.js");
+/* Capture-group extraction tests for engine.js (no dependencies). */
+const E = require("../engine.js");
 const now = new Date().toISOString();
 function mk(over) {
   return Object.assign({ type: "issue", number: 1, labelNames: [], labels: [], assignees: [], repo: "o/a", state: "open", draft: false, merged: false, updatedAt: now, createdAt: now, body: "" }, over);

@@ -1,5 +1,5 @@
 /*
- * github-board.engine.js
+ * engine.js
  * A small boolean expression language for filtering/bucketing GitHub items.
  * Properties: type, number, title, state, url, author, assignee(s), label(s),
  *   milestone, repo, createdAt, updatedAt, body, draft, merged, closed,
@@ -412,6 +412,53 @@
     return function (item) { try { return extractFromAst(ast, item); } catch (e) { return null; } };
   }
 
+  // Like matchCmp but collects every capture: one per matching array element,
+  // or every global-regex match for a scalar. Lets one item expand into many buckets.
+  function matchCmpAll(node, item) {
+    const R = node.right;
+    const rv = R.value; // { type, value, flags }
+    if (!rv || rv.type !== "regex") return [];
+    let re;
+    try { re = new RegExp(rv.value, rv.flags || ""); } catch (e) { return []; }
+    const L = node.left;
+    let target;
+    if (L.kind === "field") target = getValue(item, L.value);
+    else target = L.value.value;
+    const results = [];
+    const push = (m) => {
+      if (!m) return;
+      const groups = m.length > 1 ? Array.prototype.slice.call(m, 1) : [];
+      results.push({ key: groups[0] != null ? groups[0] : m[0], groups, full: m[0] });
+    };
+    if (Array.isArray(target)) {
+      for (const x of target) push(re.exec(String(x)));
+    } else if (target != null) {
+      if (rv.flags && rv.flags.indexOf("g") >= 0) {
+        let m;
+        while ((m = re.exec(String(target))) !== null) { push(m); if (m.index === re.lastIndex) re.lastIndex++; }
+      } else push(re.exec(String(target)));
+    }
+    return results;
+  }
+
+  // If the predicate holds, returns all regex captures across the expression;
+  // empty array otherwise. Each element is { key, groups, full }.
+  function extractAllFromAst(ast, item) {
+    if (!evaluate(ast, item)) return [];
+    const out = [];
+    collectRegexCmps(ast, out);
+    const all = [];
+    for (const node of out) { const ms = matchCmpAll(node, item); for (const m of ms) all.push(m); }
+    return all;
+  }
+
+  function tryExtractAll(expr) {
+    if (expr == null || String(expr).trim() === "") return null;
+    let ast;
+    try { ast = parse(String(expr)); } catch (e) { return null; }
+    return function (item) { try { return extractAllFromAst(ast, item); } catch (e) { return []; } };
+  }
+
 
   const FIELDS = [
     ["type", "issue | pr"],
@@ -457,5 +504,5 @@
     ['Status: $1', 'type == pr and labels =~ /^status:(\\w+)$/', 'PR statuses only'],
   ];
 
-  return { compile, tryCompile, tryExtract, tokenize, parse, evaluate, FIELDS, OPERATORS, EXAMPLES, SPLITTERS };
+  return { compile, tryCompile, tryExtract, tryExtractAll, tokenize, parse, evaluate, FIELDS, OPERATORS, EXAMPLES, SPLITTERS };
 });

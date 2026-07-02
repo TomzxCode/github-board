@@ -1,6 +1,6 @@
 /* End-to-end test: loads the real HTML+JS in jsdom, mocks the GitHub GraphQL
  * response, and checks fetch, fixed-column bucketing, rendering, and live filter.
- * Requires jsdom: `npm install` then `node test/github-board-e2e-board.test.js`. */
+ * Requires jsdom: `npm install` then `node test/e2e-board.test.js`. */
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
